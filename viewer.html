@@ -1,0 +1,1250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccreplay</title>
+<style>
+/* Solarized Dark — https://ethanschoonover.com/solarized/ */
+:root {
+  --base03: #002b36;  /* bg */
+  --base02: #073642;  /* bg highlights */
+  --base01: #586e75;  /* comments, secondary */
+  --base00: #657b83;
+  --base0:  #839496;  /* body text */
+  --base1:  #93a1a1;  /* emphasis */
+  --base2:  #eee8d5;
+  --base3:  #fdf6e3;
+  --bg: var(--base03);
+  --bg-alt: var(--base02);
+  --bg-card: var(--base02);
+  --fg: var(--base0);
+  --fg-dim: var(--base01);
+  --fg-faint: var(--base01);
+  --border: var(--base01);
+  --border-light: #073642;
+  --red: #dc322f;
+  --green: #859900;
+  --blue: #268bd2;
+  --magenta: #d33682;
+  --cyan: #2aa198;
+  --yellow: #b58900;
+  --orange: #cb4b16;
+  --violet: #6c71c4;
+  --link: #268bd2;
+  --selection: #073642;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: "SF Mono", "Menlo", "Monaco", "Cascadia Code", monospace; background: var(--bg); color: var(--fg); display: flex; flex-direction: column; height: 100vh; }
+header { background: var(--bg-alt); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+header h1 { font-size: 14px; font-weight: 600; color: var(--fg); }
+header .stat { font-size: 12px; color: var(--fg-dim); background: var(--bg-alt); padding: 2px 8px; border-radius: 12px; }
+.container { display: flex; flex: 1; overflow: hidden; }
+.turn-list { width: 280px; min-width: 280px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg); }
+.conv-item { padding: 10px 14px; border-bottom: 1px solid var(--border-light); cursor: pointer; font-size: 12px; }
+.conv-item:hover { background: var(--bg-alt); }
+.conv-item.active { background: var(--selection); border-left: 3px solid var(--blue); }
+.conv-item .conv-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.conv-item .conv-label { font-weight: 600; color: var(--fg); font-size: 12px; }
+.conv-item .conv-preview { font-size: 11px; color: var(--fg-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 2px 0; font-style: italic; }
+.conv-item .conv-meta { color: var(--fg-dim); font-size: 11px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.conv-item .conv-dir { font-size: 10px; color: var(--fg-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; margin: 2px 0 0; }
+.turn-model { font-size: 11px; padding: 1px 6px; border-radius: 8px; }
+.model-opus { background: #85990018; color: var(--green); }
+.model-haiku { background: #6c71c418; color: var(--violet); }
+.model-sonnet { background: #268bd218; color: var(--blue); }
+.detail { flex: 1; overflow-y: auto; padding: 0; }
+.detail-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--fg-faint); font-size: 14px; }
+.section { border-bottom: 1px solid var(--border-light); }
+.section-header { padding: 10px 20px; background: var(--bg-alt); cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--fg); user-select: none; }
+.section-header:hover { background: #0a4050; }
+.section-header .arrow { transition: transform 0.15s; font-size: 10px; color: var(--fg-dim); }
+.section-header .arrow.open { transform: rotate(90deg); }
+.section-header .badge { font-size: 11px; font-weight: 400; color: var(--fg-dim); background: var(--bg); padding: 1px 6px; border-radius: 8px; margin-left: auto; }
+.section-body { padding: 12px 20px; display: none; }
+.section-body.open { display: block; }
+
+/* Overview */
+.overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.overview-card { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 6px; padding: 10px 12px; }
+.overview-card .label { font-size: 11px; color: var(--fg-dim); margin-bottom: 2px; }
+.overview-card .value { font-size: 14px; font-weight: 600; color: var(--fg); }
+
+/* Messages */
+.msg { margin-bottom: 8px; border-radius: 6px; border: 1px solid var(--border-light); overflow: hidden; }
+.msg-header { padding: 6px 12px; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.msg-body { padding: 8px 12px; font-size: 12px; line-height: 1.6; }
+.msg.role-user .msg-header { background: var(--bg-alt); color: var(--blue); }
+.msg.role-assistant .msg-header { background: var(--bg-alt); color: var(--green); }
+.msg.role-user .msg-body { border-left: 3px solid var(--blue); }
+.msg.role-assistant .msg-body { border-left: 3px solid var(--green); }
+
+/* Content blocks */
+.content-block { margin-bottom: 6px; }
+.block-text { white-space: pre-wrap; word-break: break-word; }
+.block-thinking { background: var(--base02); border: 1px solid var(--border-light); border-radius: 4px; padding: 8px; margin: 4px 0; }
+.block-thinking summary { color: var(--magenta); font-size: 11px; cursor: pointer; user-select: none; }
+.block-thinking pre { white-space: pre-wrap; word-break: break-word; margin-top: 6px; font-size: 11px; color: var(--fg-dim); max-height: 300px; overflow-y: auto; }
+.block-tool { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 4px; margin: 4px 0; }
+.block-tool summary { padding: 6px 10px; color: var(--blue); font-size: 11px; cursor: pointer; user-select: none; }
+.block-tool pre { padding: 6px 10px; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--fg-dim); max-height: 400px; overflow-y: auto; }
+.block-tool-result { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 4px; margin: 4px 0; }
+.block-tool-result summary { padding: 6px 10px; color: var(--fg-dim); font-size: 11px; cursor: pointer; user-select: none; }
+.block-tool-result pre { padding: 6px 10px; white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--fg-dim); max-height: 400px; overflow-y: auto; }
+
+/* System prompt */
+.system-block { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 4px; padding: 10px; margin-bottom: 8px; }
+.system-block pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; line-height: 1.5; max-height: 500px; overflow-y: auto; }
+.system-block .sys-type { font-size: 11px; color: var(--fg-dim); margin-bottom: 4px; }
+
+.json-raw { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 4px; padding: 10px; white-space: pre-wrap; word-break: break-word; font-size: 11px; max-height: 600px; overflow-y: auto; }
+
+/* JSON syntax highlighting (jq-style) */
+.json-key { color: var(--blue); font-weight: 600; }
+.json-string { color: var(--green); }
+.json-number { color: var(--cyan); }
+.json-bool { color: var(--yellow); }
+.json-null { color: var(--orange); }
+
+/* Markdown content */
+.md-content { white-space: normal; word-break: break-word; }
+.md-content h1, .md-content h2, .md-content h3, .md-content h4, .md-content h5, .md-content h6 { color: var(--base1); margin: 0.6em 0 0.3em; font-family: inherit; }
+.md-content h1 { font-size: 1.4em; } .md-content h2 { font-size: 1.25em; } .md-content h3 { font-size: 1.1em; }
+.md-content h4 { font-size: 1em; } .md-content h5 { font-size: 0.95em; } .md-content h6 { font-size: 0.9em; }
+.md-content p { margin: 0.4em 0; }
+.md-content code { background: var(--base02); color: var(--cyan); padding: 1px 4px; border-radius: 3px; font-size: 0.92em; }
+.md-content pre { background: var(--base02); color: var(--base0); padding: 8px 10px; border-radius: 4px; overflow-x: auto; margin: 0.5em 0; white-space: pre-wrap; word-break: break-word; }
+.md-content pre code { background: none; color: inherit; padding: 0; font-size: 0.92em; }
+.md-content blockquote { border-left: 3px solid var(--yellow); padding: 4px 12px; margin: 0.5em 0; color: var(--fg-dim); }
+.md-content ul, .md-content ol { padding-left: 1.5em; margin: 0.4em 0; }
+.md-content li { margin: 0.2em 0; }
+.md-content a { color: var(--blue); text-decoration: underline; }
+.md-content table { border-collapse: collapse; margin: 0.5em 0; }
+.md-content th, .md-content td { border: 1px solid var(--base02); padding: 4px 8px; font-size: 0.92em; }
+.md-content th { background: var(--base02); color: var(--base1); }
+.md-content strong { color: var(--base1); } .md-content em { font-style: italic; }
+.md-content hr { border: none; border-top: 1px solid var(--border); margin: 0.8em 0; }
+.md-content img { max-width: 100%; }
+
+/* Tool card in conversation view */
+.tool-card { border: 1px solid var(--border-light); border-radius: 4px; margin-bottom: 4px; border-left: 3px solid var(--blue); }
+.tool-card summary { padding: 6px 10px; font-size: 11px; cursor: pointer; user-select: none; color: var(--blue); display: flex; align-items: center; gap: 6px; }
+.tool-card summary .tool-card-name { font-weight: 600; }
+.tool-card summary .tool-card-param { color: var(--fg-dim); font-weight: 400; }
+.tool-card-body { border-top: 1px solid var(--border-light); }
+.tool-card-section { padding: 6px 10px; }
+.tool-card-section-label { font-size: 10px; color: var(--fg-dim); font-weight: 600; margin-bottom: 2px; }
+.tool-card-section pre { white-space: pre-wrap; word-break: break-word; font-size: 11px; color: var(--fg-dim); max-height: 300px; overflow-y: auto; }
+.tool-card-section .md-content { font-size: 11px; color: var(--fg-dim); max-height: 300px; overflow-y: auto; }
+.tool-card-error { color: var(--red); font-size: 10px; font-weight: 600; }
+
+/* Turn separator in conversation view */
+.turn-separator { display: flex; align-items: center; gap: 8px; margin: 16px 0 8px; color: var(--fg-dim); font-size: 11px; }
+.turn-separator::before, .turn-separator::after { content: ''; flex: 1; border-top: 1px dashed var(--border-light); }
+.turn-separator span { white-space: nowrap; }
+
+/* Turn */
+.turn { margin-bottom: 8px; border-left: 2px solid var(--border-light); }
+.turn-summary { padding: 8px 12px; cursor: pointer; user-select: none; display: flex; align-items: baseline; gap: 12px; }
+.turn-summary:hover { background: var(--bg-hover); }
+.turn-summary-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.turn-summary-stats { flex-shrink: 0; font-size: 11px; color: var(--fg-dim); }
+.turn-body { padding-left: 12px; }
+
+/* Sub-call item */
+.subcall-item { padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 4px; margin-bottom: 6px; font-size: 12px; cursor: pointer; }
+.subcall-item:hover { background: var(--bg-alt); }
+.subcall-item .subcall-header { display: flex; justify-content: space-between; align-items: center; }
+.subcall-item .subcall-label { font-weight: 600; color: var(--fg-dim); }
+.subcall-item .subcall-meta { color: var(--fg-dim); font-size: 11px; }
+
+/* Drop zone */
+.drop-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px; }
+.drop-zone .drop-area { border: 2px dashed var(--border); border-radius: 12px; padding: 60px 40px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; }
+.drop-zone .drop-area:hover, .drop-zone .drop-area.dragover { border-color: var(--blue); background: var(--bg-alt); }
+.drop-zone .drop-area h2 { font-size: 16px; color: var(--fg); margin-bottom: 8px; font-weight: 600; }
+.drop-zone .drop-area p { font-size: 13px; color: var(--fg-dim); }
+.drop-zone input[type="file"] { display: none; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>ccreplay</h1>
+  <span class="stat" id="hdr-file"></span>
+  <span class="stat" id="hdr-turns"></span>
+</header>
+<div class="container">
+  <div class="turn-list" id="turnList"></div>
+  <div class="detail" id="detail"><div class="detail-empty">Select a conversation from the left panel</div></div>
+</div>
+
+<script id="embedded-data" type="application/json">null</script>
+
+<script>
+// ---- Data Loading Layer ----
+(function() {
+  function tryEmbeddedData() {
+    const el = document.getElementById("embedded-data");
+    if (!el) return null;
+    try {
+      const data = JSON.parse(el.textContent);
+      if (Array.isArray(data) && data.length > 0) return data;
+    } catch {}
+    return null;
+  }
+
+  async function tryApiData() {
+    try {
+      const resp = await fetch("/_/api/records");
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (Array.isArray(data)) return data;
+    } catch {}
+    return null;
+  }
+
+  function showDropZone() {
+    const container = document.querySelector(".container");
+    container.innerHTML = "";
+    const turnList = document.createElement("div");
+    turnList.className = "turn-list";
+    turnList.id = "turnList";
+    container.appendChild(turnList);
+
+    const detail = document.createElement("div");
+    detail.className = "detail";
+    detail.id = "detail";
+    detail.innerHTML =
+      '<div class="drop-zone">' +
+        '<div class="drop-area" id="dropArea">' +
+          '<h2>Drop JSONL file here</h2>' +
+          '<p>or click to select a file</p>' +
+        '</div>' +
+        '<input type="file" id="fileInput" accept=".jsonl,.json">' +
+      '</div>';
+    container.appendChild(detail);
+
+    const dropArea = detail.querySelector("#dropArea");
+    const fileInput = detail.querySelector("#fileInput");
+
+    dropArea.addEventListener("click", () => fileInput.click());
+    dropArea.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropArea.classList.add("dragover");
+    });
+    dropArea.addEventListener("dragleave", () => {
+      dropArea.classList.remove("dragover");
+    });
+    dropArea.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropArea.classList.remove("dragover");
+      const file = e.dataTransfer.files[0];
+      if (file) loadFile(file);
+    });
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files[0]) loadFile(fileInput.files[0]);
+    });
+  }
+
+  function loadFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const lines = reader.result.split("\n").filter(l => l.trim());
+      const records = [];
+      for (const line of lines) {
+        try { records.push(JSON.parse(line)); } catch {}
+      }
+      if (records.length > 0) {
+        document.getElementById("hdr-file").textContent = file.name;
+        const container = document.querySelector(".container");
+        container.innerHTML =
+          '<div class="turn-list" id="turnList"></div>' +
+          '<div class="detail" id="detail"><div class="detail-empty">Select a conversation from the left panel</div></div>';
+        initViewer(records);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function boot() {
+    const embedded = tryEmbeddedData();
+    if (embedded) {
+      initViewer(embedded);
+      return;
+    }
+
+    const apiData = await tryApiData();
+    if (apiData !== null) {
+      document.getElementById("hdr-file").textContent = "live";
+      if (apiData.length > 0) {
+        initViewer(apiData);
+      } else {
+        document.getElementById("detail").innerHTML =
+          '<div class="detail-empty">Waiting for requests... Refresh the page after traffic is recorded.</div>';
+      }
+      return;
+    }
+
+    showDropZone();
+  }
+
+  boot();
+})();
+
+// ---- Main Viewer ----
+function initViewer(RECORDS) {
+
+// Parse each record
+const turns = RECORDS.map((rec, i) => {
+  const reqBody = rec.request.body || {};
+  const model = reqBody.model || "unknown";
+  const messages = reqBody.messages || [];
+  const system = reqBody.system || [];
+  const tools = reqBody.tools || [];
+  const respBody = rec.response.body;
+  const timestamp = rec.timestamp;
+
+  let usage = {};
+  let respContent = [];
+  if (typeof respBody === "string") {
+    const parsed = parseSSE(respBody);
+    usage = parsed.usage;
+    respContent = parsed.content;
+  } else if (respBody && typeof respBody === "object") {
+    if (respBody.usage) usage = respBody.usage;
+    if (respBody.content) respContent = respBody.content;
+    if (respBody.input_tokens !== undefined) {
+      usage = { input_tokens: respBody.input_tokens };
+    }
+  }
+
+  return { index: i, model, messages, system, tools, usage, respContent, respBody, timestamp, reqBody };
+});
+
+function parseSSE(text) {
+  const lines = text.split("\n");
+  let usage = {};
+  let content = [];
+  let currentBlock = null;
+
+  for (const line of lines) {
+    if (!line.startsWith("data: ")) continue;
+    let data;
+    try { data = JSON.parse(line.slice(6)); } catch { continue; }
+
+    switch (data.type) {
+      case "message_start":
+        if (data.message && data.message.usage) {
+          usage = { ...usage, ...data.message.usage };
+        }
+        break;
+      case "content_block_start":
+        currentBlock = { ...data.content_block, _index: data.index };
+        if (currentBlock.type === "text") currentBlock.text = currentBlock.text || "";
+        if (currentBlock.type === "thinking") currentBlock.thinking = currentBlock.thinking || "";
+        if (currentBlock.type === "tool_use") currentBlock.input = "";
+        break;
+      case "content_block_delta":
+        if (!currentBlock) break;
+        const d = data.delta;
+        if (d.type === "text_delta") currentBlock.text = (currentBlock.text || "") + d.text;
+        if (d.type === "thinking_delta") currentBlock.thinking = (currentBlock.thinking || "") + d.thinking;
+        if (d.type === "input_json_delta") currentBlock.input = (currentBlock.input || "") + d.partial_json;
+        break;
+      case "content_block_stop":
+        if (currentBlock) {
+          if (currentBlock.type === "tool_use" && typeof currentBlock.input === "string") {
+            try { currentBlock.input = JSON.parse(currentBlock.input); } catch {}
+          }
+          content.push(currentBlock);
+          currentBlock = null;
+        }
+        break;
+      case "message_delta":
+        if (data.usage) usage = { ...usage, ...data.usage };
+        break;
+    }
+  }
+  return { usage, content };
+}
+
+// ---- Utility Functions ----
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash = hash & hash;
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function formatTokens(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "K";
+  return String(n);
+}
+
+function extractKeyParams(input) {
+  if (!input || typeof input !== "object") return "";
+  const keys = ["command", "file_path", "pattern", "query", "url", "path", "skill", "prompt"];
+  for (const k of keys) {
+    if (input[k]) {
+      let v = String(input[k]);
+      if (v.length > 60) v = v.slice(0, 57) + "...";
+      return v;
+    }
+  }
+  return "";
+}
+
+function shortModel(m) {
+  if (m.includes("opus")) return "Opus";
+  if (m.includes("haiku")) return "Haiku";
+  if (m.includes("sonnet")) return "Sonnet";
+  return m;
+}
+
+function modelClass(m) {
+  if (m.includes("opus")) return "model-opus";
+  if (m.includes("haiku")) return "model-haiku";
+  if (m.includes("sonnet")) return "model-sonnet";
+  return "";
+}
+
+function esc(s) {
+  const el = document.createElement("span");
+  el.textContent = s;
+  return el.innerHTML;
+}
+
+function highlightJSON(json) {
+  const escaped = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return escaped.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+    function(match) {
+      let cls = 'json-number';
+      if (/^"/.test(match)) {
+        cls = /:$/.test(match) ? 'json-key' : 'json-string';
+      } else if (/true|false/.test(match)) {
+        cls = 'json-bool';
+      } else if (/null/.test(match)) {
+        cls = 'json-null';
+      }
+      return '<span class="' + cls + '">' + match + '</span>';
+    }
+  );
+}
+
+function renderMarkdown(text) {
+  if (typeof marked !== 'undefined') {
+    return marked.parse(text, { breaks: true });
+  }
+  return '<pre style="white-space:pre-wrap">' + esc(text) + '</pre>';
+}
+
+function textBlock(s) {
+  const el = document.createElement("div");
+  el.className = "block-text md-content";
+  el.innerHTML = renderMarkdown(s);
+  return el;
+}
+
+// ---- Build Conversations ----
+function buildConversations(turns) {
+  const convMap = {};
+  const subcalls = [];
+
+  for (const t of turns) {
+    if (t.messages.length <= 1) {
+      subcalls.push(t);
+    } else {
+      const key = simpleHash(JSON.stringify(t.messages[0])) + "_" + shortModel(t.model);
+      if (!convMap[key]) {
+        convMap[key] = { turns: [], subcalls: [], model: t.model, key: key };
+      }
+      convMap[key].turns.push(t);
+    }
+  }
+
+  const convList = Object.values(convMap);
+
+  // Sort turns within each conversation by index
+  for (const conv of convList) {
+    conv.turns.sort((a, b) => a.index - b.index);
+  }
+
+  // Assign subcalls to nearest conversation by timestamp
+  for (const sub of subcalls) {
+    let bestConv = null;
+    let bestDist = Infinity;
+    const subTime = sub.timestamp ? new Date(sub.timestamp).getTime() : 0;
+    for (const conv of convList) {
+      for (const ct of conv.turns) {
+        const ctTime = ct.timestamp ? new Date(ct.timestamp).getTime() : 0;
+        const dist = Math.abs(subTime - ctTime);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestConv = conv;
+        }
+      }
+    }
+    if (bestConv) {
+      bestConv.subcalls.push(sub);
+    }
+  }
+
+  // If no conversations exist but there are subcalls, create a single conversation per subcall
+  if (convList.length === 0) {
+    for (const sub of subcalls) {
+      convList.push({ turns: [sub], subcalls: [], model: sub.model, key: "solo_" + sub.index });
+    }
+  }
+
+  // Sort conversations by first turn index
+  convList.sort((a, b) => a.turns[0].index - b.turns[0].index);
+  return convList;
+}
+
+const conversations = buildConversations(turns);
+
+// ---- Header ----
+const totalTurns = turns.length;
+const totalSubcalls = conversations.reduce((s, c) => s + c.subcalls.length, 0);
+document.getElementById("hdr-turns").textContent = conversations.length + " conversations, " + totalTurns + " turns";
+
+// ---- Sidebar: Conversation List ----
+const turnListEl = document.getElementById("turnList");
+turnListEl.innerHTML = "";
+
+function convPreview(conv) {
+  const lastTurn = conv.turns[conv.turns.length - 1];
+  for (let i = lastTurn.messages.length - 1; i >= 0; i--) {
+    const m = lastTurn.messages[i];
+    if (m.role !== "user") continue;
+    const c = m.content;
+    let text = "";
+    if (typeof c === "string") text = c;
+    else if (Array.isArray(c)) {
+      for (const b of c) {
+        if (b.type === "text" && b.text) { text = b.text; break; }
+      }
+    }
+    text = text.replace(/\s+/g, " ").trim();
+    if (text.length > 60) text = text.slice(0, 57) + "...";
+    if (text) return text;
+  }
+  return "";
+}
+
+function convWorkDir(conv) {
+  const firstTurn = conv.turns[0];
+  if (!firstTurn.system || firstTurn.system.length === 0) return "";
+  for (const s of firstTurn.system) {
+    if (!s.text) continue;
+    const m = s.text.match(/Primary working directory:\s*(.+)/);
+    if (m) return m[1].trim();
+  }
+  return "";
+}
+
+function convTimeRange(conv) {
+  const first = conv.turns[0].timestamp;
+  const last = conv.turns[conv.turns.length - 1].timestamp;
+  if (!first) return "-";
+  const fmt = (ts) => {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+  if (conv.turns.length === 1) return fmt(first);
+  return fmt(first) + " – " + fmt(last);
+}
+
+conversations.forEach((conv, ci) => {
+  const el = document.createElement("div");
+  el.className = "conv-item";
+  el.dataset.convIndex = ci;
+
+  const preview = convPreview(conv);
+  const workDir = convWorkDir(conv);
+  const subLabel = conv.subcalls.length > 0 ? " + " + conv.subcalls.length + " sub" : "";
+
+  el.innerHTML =
+    '<div class="conv-header">' +
+      '<span class="conv-label">Conversation #' + ci + '</span>' +
+      '<span class="turn-model ' + modelClass(conv.model) + '">' + esc(shortModel(conv.model)) + '</span>' +
+    '</div>' +
+    (preview ? '<div class="conv-preview">"' + esc(preview) + '"</div>' : '') +
+    (workDir ? '<div class="conv-dir">' + esc(workDir) + '</div>' : '') +
+    '<div class="conv-meta">' +
+      '<span>' + conv.turns.length + ' turns' + subLabel + '</span>' +
+      '<span>' + esc(convTimeRange(conv)) + '</span>' +
+    '</div>';
+
+  el.onclick = () => selectConv(ci);
+  turnListEl.appendChild(el);
+});
+
+// ---- Conversation Selection ----
+let activeConvIdx = -1;
+
+function selectConv(ci) {
+  if (activeConvIdx === ci) return;
+  activeConvIdx = ci;
+
+  turnListEl.querySelectorAll(".conv-item").forEach(el => {
+    el.classList.toggle("active", parseInt(el.dataset.convIndex) === ci);
+  });
+
+  renderConvDetail(conversations[ci]);
+}
+
+// ---- Detail Rendering ----
+function renderConvDetail(conv) {
+  const el = document.getElementById("detail");
+  el.innerHTML = "";
+
+  el.appendChild(makeSection("Overview", true, () => renderConvOverview(conv)));
+  el.appendChild(makeSection("Conversation (" + conv.turns.length + " turns)", true, () => renderTurns(conv)));
+
+  if (conv.subcalls.length > 0) {
+    el.appendChild(makeSection("Sub-calls (" + conv.subcalls.length + ")", false, () => renderSubcalls(conv)));
+  }
+
+  const lastTurn = conv.turns[conv.turns.length - 1];
+  if (lastTurn.system.length > 0) {
+    el.appendChild(makeSection("System Prompt (" + lastTurn.system.length + ")", false, () => renderSystem(lastTurn)));
+  }
+
+  if (lastTurn.tools.length > 0) {
+    const localTools = lastTurn.tools.filter(t => !t.type);
+    const serverTools = lastTurn.tools.filter(t => t.type);
+    const label = "Tools (" + localTools.length + " local" + (serverTools.length ? ", " + serverTools.length + " server" : "") + ")";
+    el.appendChild(makeSection(label, false, () => renderTools(lastTurn)));
+  }
+}
+
+function makeSection(title, defaultOpen, renderFn) {
+  const sec = document.createElement("div");
+  sec.className = "section";
+
+  const header = document.createElement("div");
+  header.className = "section-header";
+  header.innerHTML = '<span class="arrow' + (defaultOpen ? " open" : "") + '">&#9654;</span> ' + esc(title);
+
+  const body = document.createElement("div");
+  body.className = "section-body" + (defaultOpen ? " open" : "");
+
+  header.onclick = () => {
+    const isOpen = body.classList.toggle("open");
+    header.querySelector(".arrow").classList.toggle("open", isOpen);
+    if (isOpen && body.childElementCount === 0) {
+      body.appendChild(renderFn());
+    }
+  };
+
+  if (defaultOpen) {
+    body.appendChild(renderFn());
+  }
+
+  sec.appendChild(header);
+  sec.appendChild(body);
+  return sec;
+}
+
+function renderConvOverview(conv) {
+  const frag = document.createElement("div");
+  frag.className = "overview-grid";
+
+  let totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreate = 0;
+  for (const t of conv.turns) {
+    totalInput += t.usage.input_tokens || 0;
+    totalOutput += t.usage.output_tokens || 0;
+    totalCacheRead += t.usage.cache_read_input_tokens || 0;
+    totalCacheCreate += t.usage.cache_creation_input_tokens || 0;
+  }
+
+  const cards = [
+    ["Model", shortModel(conv.model)],
+    ["Turns", conv.turns.length + (conv.subcalls.length > 0 ? " + " + conv.subcalls.length + " sub" : "")],
+    ["Time Range", convTimeRange(conv)],
+    ["Total Input", formatTokens(totalInput)],
+    ["Total Output", formatTokens(totalOutput)],
+    ["Cache Read", formatTokens(totalCacheRead)],
+    ["Cache Create", formatTokens(totalCacheCreate)],
+  ];
+
+  cards.forEach(([label, value]) => {
+    const c = document.createElement("div");
+    c.className = "overview-card";
+    c.innerHTML = '<div class="label">' + esc(label) + '</div><div class="value">' + esc(String(value)) + '</div>';
+    frag.appendChild(c);
+  });
+
+  return frag;
+}
+
+function renderTurns(conv) {
+  const frag = document.createElement("div");
+
+  // Build tool_use_id -> tool_result map from delta messages across all turns
+  const toolResultMap = {};
+  conv.turns.forEach((apiCall, ti) => {
+    const prevMsgCount = ti > 0 ? conv.turns[ti - 1].messages.length : 0;
+    const delta = apiCall.messages.slice(prevMsgCount);
+    for (const m of delta) {
+      if (m.role !== "user" || !Array.isArray(m.content)) continue;
+      for (const b of m.content) {
+        if (b.type === "tool_result" && b.tool_use_id) {
+          let resultText = "";
+          if (typeof b.content === "string") {
+            resultText = b.content;
+          } else if (Array.isArray(b.content)) {
+            resultText = b.content.map(x => x.type === "text" ? x.text : JSON.stringify(x, null, 2)).join("\n");
+          } else if (b.content) {
+            resultText = JSON.stringify(b.content, null, 2);
+          }
+          toolResultMap[b.tool_use_id] = { content: resultText, is_error: b.is_error };
+        }
+      }
+    }
+  });
+
+  // Group API calls into turns: a turn starts with a real user text message
+  const groupedTurns = [];
+  let currentTurn = null;
+
+  function hasUserText(delta) {
+    for (const m of delta) {
+      if (m.role !== "user") continue;
+      if (Array.isArray(m.content) && m.content.every(b => b.type === "tool_result")) continue;
+      let text = "";
+      if (typeof m.content === "string") text = m.content;
+      else if (Array.isArray(m.content)) {
+        for (const b of m.content) {
+          if (b.type === "text" && b.text) { text = b.text; break; }
+        }
+      }
+      if (text.trim()) return true;
+    }
+    return false;
+  }
+
+  function getUserTextMsgs(delta) {
+    const result = [];
+    for (const m of delta) {
+      if (m.role !== "user") continue;
+      if (Array.isArray(m.content) && m.content.every(b => b.type === "tool_result")) continue;
+      result.push(m);
+    }
+    return result;
+  }
+
+  conv.turns.forEach((apiCall, ti) => {
+    const prevMsgCount = ti > 0 ? conv.turns[ti - 1].messages.length : 0;
+    const delta = apiCall.messages.slice(prevMsgCount);
+
+    if (hasUserText(delta)) {
+      currentTurn = { userMessages: getUserTextMsgs(delta), apiCalls: [apiCall] };
+      groupedTurns.push(currentTurn);
+    } else if (currentTurn) {
+      currentTurn.apiCalls.push(apiCall);
+    } else {
+      currentTurn = { userMessages: [], apiCalls: [apiCall] };
+      groupedTurns.push(currentTurn);
+    }
+  });
+
+  // Render each turn as a collapsible unit: user message as header, API responses as body
+  groupedTurns.forEach((gt, ti) => {
+    const totalIn = gt.apiCalls.reduce((s, t) => s + (t.usage.input_tokens || 0), 0);
+    const totalOut = gt.apiCalls.reduce((s, t) => s + (t.usage.output_tokens || 0), 0);
+    const callCount = gt.apiCalls.length;
+
+    // Extract user text preview for summary
+    let userPreview = "";
+    for (const m of gt.userMessages) {
+      if (typeof m.content === "string") { userPreview = m.content; break; }
+      if (Array.isArray(m.content)) {
+        for (const b of m.content) {
+          if (b.type === "text" && b.text) { userPreview = b.text; break; }
+        }
+        if (userPreview) break;
+      }
+    }
+    userPreview = userPreview.trim().split("\n")[0].slice(0, 120);
+
+    const turnDetails = document.createElement("details");
+    turnDetails.className = "turn";
+
+    // Summary: user message preview + stats
+    const turnSummaryEl = document.createElement("summary");
+    turnSummaryEl.className = "turn-summary";
+    const previewSpan = document.createElement("span");
+    previewSpan.className = "turn-summary-text";
+    previewSpan.textContent = "#" + ti + "  " + (userPreview || "(no user message)");
+    const statsSpan = document.createElement("span");
+    statsSpan.className = "turn-summary-stats";
+    statsSpan.textContent = callCount + " calls · " + formatTokens(totalIn) + " in / " + formatTokens(totalOut) + " out";
+    turnSummaryEl.appendChild(previewSpan);
+    turnSummaryEl.appendChild(statsSpan);
+    turnDetails.appendChild(turnSummaryEl);
+
+    const turnBody = document.createElement("div");
+    turnBody.className = "turn-body";
+
+    // Full user message(s)
+    gt.userMessages.forEach(m => {
+      const mel = document.createElement("div");
+      mel.className = "msg role-user";
+      const header = document.createElement("div");
+      header.className = "msg-header";
+      header.textContent = "user";
+      mel.appendChild(header);
+      const body = document.createElement("div");
+      body.className = "msg-body";
+      if (typeof m.content === "string") {
+        body.appendChild(textBlock(m.content));
+      } else if (Array.isArray(m.content)) {
+        m.content.forEach(block => {
+          if (block.type === "tool_result") return;
+          body.appendChild(renderContentBlock(block));
+        });
+      }
+      mel.appendChild(body);
+      turnBody.appendChild(mel);
+    });
+
+    // All API call responses
+    gt.apiCalls.forEach(apiCall => {
+      if (apiCall.respContent && apiCall.respContent.length > 0) {
+        const textBlocks = apiCall.respContent.filter(b => b.type === "text" || b.type === "thinking");
+        const toolBlocks = apiCall.respContent.filter(b => b.type === "tool_use");
+        const otherBlocks = apiCall.respContent.filter(b => b.type !== "text" && b.type !== "thinking" && b.type !== "tool_use");
+
+        // Render text/thinking as assistant bubble
+        if (textBlocks.length > 0) {
+          const mel = document.createElement("div");
+          mel.className = "msg role-assistant";
+          const header = document.createElement("div");
+          header.className = "msg-header";
+          header.textContent = "assistant";
+          mel.appendChild(header);
+          const body = document.createElement("div");
+          body.className = "msg-body";
+          textBlocks.forEach(block => {
+            if (block.type === "text") {
+              const tb = document.createElement("div");
+              tb.className = "content-block block-text md-content";
+              tb.innerHTML = renderMarkdown(block.text || "");
+              body.appendChild(tb);
+            } else if (block.type === "thinking") {
+              const tb = document.createElement("div");
+              tb.className = "content-block";
+              tb.innerHTML = '<details class="block-thinking"><summary>thinking</summary><div class="md-content" style="margin-top:6px;font-size:11px;color:var(--fg-dim);max-height:300px;overflow-y:auto;">' + renderMarkdown(block.thinking || "") + '</div></details>';
+              body.appendChild(tb);
+            }
+          });
+          mel.appendChild(body);
+          turnBody.appendChild(mel);
+        }
+
+        // Render tool_use as compact tool cards
+        toolBlocks.forEach(block => {
+          turnBody.appendChild(renderToolCard(block, toolResultMap));
+        });
+
+        // Render other blocks
+        otherBlocks.forEach(block => {
+          const tb = document.createElement("div");
+          tb.className = "content-block";
+          tb.innerHTML = '<details class="block-tool"><summary>' + esc(block.type || "unknown") + '</summary><pre>' + esc(JSON.stringify(block, null, 2)) + '</pre></details>';
+          turnBody.appendChild(tb);
+        });
+      }
+
+      // Raw JSON toggle (always shown, structured delta)
+      const rawEl = document.createElement("details");
+      rawEl.className = "block-tool";
+      rawEl.style.marginTop = "4px";
+      rawEl.innerHTML = '<summary style="font-size:10px;color:var(--fg-faint);padding:4px 10px;">Raw JSON #' + apiCall.index + '</summary>';
+      rawEl.addEventListener("toggle", function() {
+        if (rawEl.open && !rawEl.dataset.loaded) {
+          rawEl.dataset.loaded = "1";
+          const rec = RECORDS[apiCall.index];
+          const convTurnIdx = conv.turns.indexOf(apiCall);
+          const prevMsgCount = convTurnIdx > 0 ? conv.turns[convTurnIdx - 1].messages.length : 0;
+          const reqBody = rec.request && rec.request.body || {};
+          const preStyle = "padding:6px 10px;white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--fg-dim);max-height:400px;overflow-y:auto;";
+
+          const wrap = document.createElement("div");
+
+          // Info line
+          const info = document.createElement("div");
+          info.style.cssText = "padding:6px 10px;font-size:11px;color:var(--fg-dim);border-bottom:1px solid var(--border-light);";
+          info.textContent = rec.request.method + ' ' + rec.request.url + ' \u2192 ' + rec.response.status + '  ' + (rec.timestamp || '');
+          wrap.appendChild(info);
+
+          const sumStyle = "padding:4px 10px;font-size:10px;color:var(--fg-faint);cursor:pointer;";
+          function rawSection(label, data, open) {
+            const d = document.createElement("details");
+            if (open) d.open = true;
+            d.innerHTML = '<summary style="' + sumStyle + '">' + esc(label) + '</summary>';
+            const p = document.createElement("pre");
+            p.style.cssText = preStyle;
+            const jsonStr = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+            p.innerHTML = highlightJSON(jsonStr);
+            d.appendChild(p);
+            return d;
+          }
+
+          // Request headers (collapsed)
+          if (rec.request.header) {
+            wrap.appendChild(rawSection("Request Headers (" + Object.keys(rec.request.header).length + ")", rec.request.header, false));
+          }
+
+          // Request params (collapsed) - model, temperature, etc.
+          const params = {};
+          for (const k of ["model", "max_tokens", "temperature", "stream", "metadata"]) {
+            if (reqBody[k] !== undefined) params[k] = reqBody[k];
+          }
+          if (Object.keys(params).length > 0) {
+            wrap.appendChild(rawSection("Request Params", params, false));
+          }
+
+          // Delta messages (start from user, skip previous assistant)
+          let deltaMessages = [];
+          if (Array.isArray(reqBody.messages)) {
+            deltaMessages = reqBody.messages.slice(prevMsgCount);
+            while (deltaMessages.length > 0 && deltaMessages[0].role === "assistant") {
+              deltaMessages.shift();
+            }
+          }
+          if (deltaMessages.length > 0) {
+            wrap.appendChild(rawSection("Request Messages (" + deltaMessages.length + " delta)", deltaMessages, true));
+          }
+
+          // Response headers (collapsed)
+          if (rec.response.header) {
+            wrap.appendChild(rawSection("Response Headers (" + Object.keys(rec.response.header).length + ")", rec.response.header, false));
+          }
+
+          // Response usage (collapsed)
+          if (apiCall.usage && Object.keys(apiCall.usage).length > 0) {
+            wrap.appendChild(rawSection("Response Usage", apiCall.usage, false));
+          }
+
+          // Response body: parsed content or raw
+          if (apiCall.respContent && apiCall.respContent.length > 0) {
+            wrap.appendChild(rawSection("Response Content (" + apiCall.respContent.length + " blocks)", apiCall.respContent, true));
+          } else if (rec.response.body) {
+            wrap.appendChild(rawSection("Response Body (raw)", rec.response.body, true));
+          }
+
+          rawEl.appendChild(wrap);
+        }
+      });
+      turnBody.appendChild(rawEl);
+    });
+
+    turnDetails.appendChild(turnBody);
+    frag.appendChild(turnDetails);
+  });
+
+  return frag;
+}
+
+function renderToolCard(block, toolResultMap) {
+  const card = document.createElement("details");
+  card.className = "tool-card";
+
+  const keyParam = extractKeyParams(block.input);
+  const summary = document.createElement("summary");
+  summary.innerHTML = '<span class="tool-card-name">' + esc(block.name || "?") + '</span>' +
+    (keyParam ? '<span class="tool-card-param">\u2192 ' + esc(keyParam) + '</span>' : '');
+  card.appendChild(summary);
+
+  const body = document.createElement("div");
+  body.className = "tool-card-body";
+
+  // Input section
+  const inputStr = typeof block.input === "string" ? block.input : JSON.stringify(block.input, null, 2);
+  const inputSec = document.createElement("div");
+  inputSec.className = "tool-card-section";
+  inputSec.innerHTML = '<div class="tool-card-section-label">Input</div><pre>' + esc(inputStr) + '</pre>';
+  body.appendChild(inputSec);
+
+  // Result section (if paired)
+  const result = toolResultMap[block.id];
+  if (result) {
+    const truncated = result.content.length > 2000;
+    const display = truncated ? result.content.slice(0, 2000) + "\n... (truncated)" : result.content;
+    const resultSec = document.createElement("div");
+    resultSec.className = "tool-card-section";
+    resultSec.style.borderTop = "1px solid var(--border-light)";
+    resultSec.innerHTML = '<div class="tool-card-section-label">Result' +
+      (result.is_error ? ' <span class="tool-card-error">[ERROR]</span>' : '') +
+      '</div><div class="md-content">' + renderMarkdown(display) + '</div>';
+    body.appendChild(resultSec);
+  }
+
+  card.appendChild(body);
+  return card;
+}
+
+function renderSubcalls(conv) {
+  const frag = document.createElement("div");
+
+  conv.subcalls.forEach(sub => {
+    const el = document.createElement("div");
+    el.className = "subcall-item";
+
+    const outTok = sub.usage.output_tokens || 0;
+    let toolNames = [];
+    if (sub.respContent) {
+      toolNames = sub.respContent.filter(b => b.type === "tool_use").map(b => b.name || "?");
+    }
+
+    el.innerHTML =
+      '<div class="subcall-header">' +
+        '<span class="subcall-label">#' + sub.index + ' ' + esc(shortModel(sub.model)) + '</span>' +
+        '<span class="subcall-meta">' + formatTokens(outTok) + ' out</span>' +
+      '</div>' +
+      (toolNames.length > 0 ? '<div style="font-size:11px;color:var(--blue);margin-top:2px;">' + esc(toolNames.join(", ")) + '</div>' : '');
+
+    el.onclick = () => renderSubcallDetail(sub);
+    frag.appendChild(el);
+  });
+
+  return frag;
+}
+
+function renderSubcallDetail(sub) {
+  const el = document.getElementById("detail");
+  el.innerHTML = "";
+
+  // Back button
+  const back = document.createElement("div");
+  back.style.cssText = "padding:8px 20px;font-size:12px;color:var(--blue);cursor:pointer;";
+  back.textContent = "\u2190 Back to conversation";
+  back.onclick = () => {
+    const ci = activeConvIdx;
+    activeConvIdx = -1;
+    selectConv(ci);
+  };
+  el.appendChild(back);
+
+  el.appendChild(makeSection("Overview", true, () => renderTurnOverview(sub)));
+
+  if (sub.messages.length > 0) {
+    el.appendChild(makeSection("Messages (" + sub.messages.length + ")", true, () => {
+      const frag = document.createElement("div");
+      sub.messages.forEach((m, idx) => frag.appendChild(renderMessage(m, idx)));
+      return frag;
+    }));
+  }
+
+  el.appendChild(makeSection("Response", true, () => renderResponse(sub)));
+}
+
+function renderTurnOverview(t) {
+  const frag = document.createElement("div");
+  frag.className = "overview-grid";
+  const cards = [
+    ["Model", t.model],
+    ["Timestamp", t.timestamp || "-"],
+    ["Messages", t.messages.length],
+    ["Input Tokens", t.usage.input_tokens || 0],
+    ["Output Tokens", t.usage.output_tokens || 0],
+    ["Cache Read", t.usage.cache_read_input_tokens || 0],
+  ];
+  cards.forEach(([label, value]) => {
+    const c = document.createElement("div");
+    c.className = "overview-card";
+    c.innerHTML = '<div class="label">' + esc(label) + '</div><div class="value">' + esc(String(value)) + '</div>';
+    frag.appendChild(c);
+  });
+  return frag;
+}
+
+function renderMessage(m, idx) {
+  const el = document.createElement("div");
+  el.className = "msg role-" + m.role;
+  const header = document.createElement("div");
+  header.className = "msg-header";
+  header.textContent = "#" + idx + " " + m.role;
+  el.appendChild(header);
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  const content = m.content;
+  if (typeof content === "string") {
+    body.appendChild(textBlock(content));
+  } else if (Array.isArray(content)) {
+    content.forEach(block => body.appendChild(renderContentBlock(block)));
+  }
+  el.appendChild(body);
+  return el;
+}
+
+function renderContentBlock(block) {
+  const el = document.createElement("div");
+  el.className = "content-block";
+
+  switch (block.type) {
+    case "text":
+      el.className += " block-text md-content";
+      el.innerHTML = renderMarkdown(block.text || "");
+      break;
+    case "thinking":
+      el.innerHTML = '<details class="block-thinking"><summary>thinking</summary><div class="md-content" style="margin-top:6px;font-size:11px;color:var(--fg-dim);max-height:300px;overflow-y:auto;">' + renderMarkdown(block.thinking || "") + '</div></details>';
+      break;
+    case "tool_use": {
+      const inputStr = typeof block.input === "string" ? block.input : JSON.stringify(block.input, null, 2);
+      el.innerHTML = '<details class="block-tool"><summary>tool_use: ' + esc(block.name || "?") + ' (' + esc(block.id || "") + ')</summary><pre>' + esc(inputStr) + '</pre></details>';
+      break;
+    }
+    case "tool_result": {
+      let resultContent = "";
+      if (typeof block.content === "string") {
+        resultContent = block.content;
+      } else if (Array.isArray(block.content)) {
+        resultContent = block.content.map(b => b.type === "text" ? b.text : JSON.stringify(b, null, 2)).join("\n");
+      } else if (block.content) {
+        resultContent = JSON.stringify(block.content, null, 2);
+      }
+      const truncated = resultContent.length > 2000;
+      const display = truncated ? resultContent.slice(0, 2000) + "\n... (truncated)" : resultContent;
+      el.innerHTML = '<details class="block-tool-result"><summary>tool_result: ' + esc(block.tool_use_id || "") + (block.is_error ? ' [ERROR]' : '') + '</summary><div class="md-content" style="padding:6px 10px;font-size:11px;color:var(--fg-dim);max-height:400px;overflow-y:auto;">' + renderMarkdown(display) + '</div></details>';
+      break;
+    }
+    default:
+      el.innerHTML = '<details class="block-tool"><summary>' + esc(block.type || "unknown") + '</summary><pre>' + esc(JSON.stringify(block, null, 2)) + '</pre></details>';
+  }
+
+  return el;
+}
+
+function renderResponse(t) {
+  const frag = document.createElement("div");
+  if (t.respContent && t.respContent.length > 0) {
+    t.respContent.forEach(block => {
+      if (block.type === "thinking") {
+        const el = document.createElement("div");
+        el.className = "content-block";
+        el.innerHTML = '<details class="block-thinking"><summary>thinking</summary><div class="md-content" style="margin-top:6px;font-size:11px;color:var(--fg-dim);max-height:300px;overflow-y:auto;">' + renderMarkdown(block.thinking || "") + '</div></details>';
+        frag.appendChild(el);
+      } else if (block.type === "tool_use") {
+        const inputStr = typeof block.input === "string" ? block.input : JSON.stringify(block.input, null, 2);
+        const keyParam = extractKeyParams(block.input);
+        const el = document.createElement("div");
+        el.className = "content-block";
+        el.innerHTML = '<details class="block-tool"><summary>tool_use: ' + esc(block.name || "?") + (keyParam ? ' \u2014 ' + esc(keyParam) : '') + '</summary><pre>' + esc(inputStr) + '</pre></details>';
+        frag.appendChild(el);
+      } else if (block.type === "text") {
+        const el = document.createElement("div");
+        el.className = "content-block block-text md-content";
+        el.innerHTML = renderMarkdown(block.text || "");
+        frag.appendChild(el);
+      } else {
+        const el = document.createElement("div");
+        el.className = "content-block";
+        el.innerHTML = '<details class="block-tool"><summary>' + esc(block.type || "unknown") + '</summary><pre>' + esc(JSON.stringify(block, null, 2)) + '</pre></details>';
+        frag.appendChild(el);
+      }
+    });
+  } else if (typeof t.respBody === "object" && t.respBody !== null) {
+    const el = document.createElement("div");
+    el.className = "json-raw";
+    el.textContent = JSON.stringify(t.respBody, null, 2);
+    frag.appendChild(el);
+  } else {
+    const el = document.createElement("div");
+    el.style.color = "var(--fg-dim)";
+    el.style.padding = "8px";
+    el.textContent = "No response content";
+    frag.appendChild(el);
+  }
+  return frag;
+}
+
+function renderSystem(t) {
+  const frag = document.createElement("div");
+  t.system.forEach((s, i) => {
+    const block = document.createElement("div");
+    block.className = "system-block";
+    const typeLabel = s.type || "text";
+    const text = s.text || JSON.stringify(s, null, 2);
+    const truncated = text.length > 3000;
+    const display = truncated ? text.slice(0, 3000) + "\n... (truncated, " + text.length + " chars total)" : text;
+    block.innerHTML = '<div class="sys-type">' + esc(typeLabel) + ' #' + i + ' (' + text.length + ' chars)</div><div class="md-content" style="font-size:12px;line-height:1.5;max-height:500px;overflow-y:auto;">' + renderMarkdown(display) + '</div>';
+    frag.appendChild(block);
+  });
+  return frag;
+}
+
+function renderTools(t) {
+  const frag = document.createElement("div");
+  const localTools = t.tools.filter(t => !t.type);
+  const serverTools = t.tools.filter(t => t.type);
+
+  if (serverTools.length > 0) {
+    const h = document.createElement("div");
+    h.style.cssText = "font-size:11px;color:var(--magenta);font-weight:600;margin-bottom:6px;";
+    h.textContent = "Server-side (" + serverTools.length + ")";
+    frag.appendChild(h);
+    serverTools.forEach(tool => {
+      const el = document.createElement("details");
+      el.className = "block-tool";
+      el.innerHTML = '<summary><span style="color:var(--magenta)">' + esc(tool.name || "?") + '</span> <span style="color:var(--fg-dim);font-size:10px">' + esc(tool.type || "") + '</span></summary><pre>' + esc(JSON.stringify(tool, null, 2)) + '</pre>';
+      frag.appendChild(el);
+    });
+  }
+
+  if (localTools.length > 0) {
+    const h = document.createElement("div");
+    h.style.cssText = "font-size:11px;color:var(--blue);font-weight:600;margin:8px 0 6px;";
+    h.textContent = "Local (" + localTools.length + ")";
+    frag.appendChild(h);
+    localTools.forEach(tool => {
+      const el = document.createElement("details");
+      el.className = "block-tool";
+      el.innerHTML = '<summary><span style="color:var(--blue)">' + esc(tool.name || "?") + '</span></summary><pre>' + esc(JSON.stringify(tool, null, 2)) + '</pre>';
+      frag.appendChild(el);
+    });
+  }
+
+  return frag;
+}
+
+// ---- Keyboard Navigation ----
+document.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+  const isUp = e.key === "ArrowUp";
+  const isDown = e.key === "ArrowDown";
+  if (!isUp && !isDown) return;
+
+  e.preventDefault();
+  if (conversations.length === 0) return;
+
+  let nextIdx;
+  if (activeConvIdx === -1) {
+    nextIdx = 0;
+  } else if (isDown) {
+    nextIdx = Math.min(activeConvIdx + 1, conversations.length - 1);
+  } else {
+    nextIdx = Math.max(activeConvIdx - 1, 0);
+  }
+
+  selectConv(nextIdx);
+  const activeEl = turnListEl.querySelector('.conv-item[data-conv-index="' + nextIdx + '"]');
+  if (activeEl) activeEl.scrollIntoView({ block: "nearest" });
+});
+
+// Auto-select first conversation
+if (conversations.length > 0) selectConv(0);
+
+} // end initViewer
+</script>
+</body>
+</html>
