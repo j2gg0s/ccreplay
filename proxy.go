@@ -99,17 +99,37 @@ func (rb *recordingBody) Close() error {
 		Request: RecordRequest{
 			Method: rb.req.Method,
 			URL:    rb.req.URL.RequestURI(),
-			Header: rb.req.Header,
+			Header: redactHeaders(rb.req.Header),
 			Body:   jsonBody(reqBody),
 		},
 		Response: RecordResponse{
 			Status: rb.resp.StatusCode,
-			Header: rb.resp.Header,
+			Header: redactHeaders(rb.resp.Header),
 			Body:   jsonBody(rb.buf.Bytes()),
 		},
 	})
 
 	return err
+}
+
+// sensitiveHeaders lists header names that should be redacted from recordings.
+var sensitiveHeaders = map[string]bool{
+	"X-Api-Key":     true,
+	"Authorization":  true,
+	"Proxy-Authorization": true,
+}
+
+// redactHeaders returns a copy of headers with sensitive values replaced.
+func redactHeaders(h map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(h))
+	for k, v := range h {
+		if sensitiveHeaders[http.CanonicalHeaderKey(k)] {
+			out[k] = []string{"[REDACTED]"}
+		} else {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // jsonBody returns raw bytes as json.RawMessage if valid JSON,
