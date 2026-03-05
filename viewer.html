@@ -977,8 +977,7 @@ function renderToolCard(block, toolResultMap) {
   // Result section (if paired)
   const result = toolResultMap[block.id];
   if (result) {
-    const truncated = result.content.length > 2000;
-    const display = truncated ? result.content.slice(0, 2000) + "\n... (truncated)" : result.content;
+    const display = result.content;
     const resultSec = document.createElement("div");
     resultSec.className = "tool-card-section";
     resultSec.style.borderTop = "1px solid var(--border-light)";
@@ -1112,8 +1111,7 @@ function renderContentBlock(block) {
       } else if (block.content) {
         resultContent = JSON.stringify(block.content, null, 2);
       }
-      const truncated = resultContent.length > 2000;
-      const display = truncated ? resultContent.slice(0, 2000) + "\n... (truncated)" : resultContent;
+      const display = resultContent;
       el.innerHTML = '<details class="block-tool-result"><summary>tool_result: ' + esc(block.tool_use_id || "") + (block.is_error ? ' [ERROR]' : '') + '</summary><div class="md-content" style="padding:6px 10px;font-size:11px;color:var(--fg-dim);max-height:400px;overflow-y:auto;">' + renderMarkdown(display) + '</div></details>';
       break;
     }
@@ -1174,8 +1172,7 @@ function renderSystem(t) {
     block.className = "system-block";
     const typeLabel = s.type || "text";
     const text = s.text || JSON.stringify(s, null, 2);
-    const truncated = text.length > 3000;
-    const display = truncated ? text.slice(0, 3000) + "\n... (truncated, " + text.length + " chars total)" : text;
+    const display = text;
     block.innerHTML = '<div class="sys-type">' + esc(typeLabel) + ' #' + i + ' (' + text.length + ' chars)</div><div class="md-content" style="font-size:12px;line-height:1.5;max-height:500px;overflow-y:auto;">' + renderMarkdown(display) + '</div>';
     frag.appendChild(block);
   });

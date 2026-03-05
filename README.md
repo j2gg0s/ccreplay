@@ -2,6 +2,12 @@
 
 Record, inspect and replay Claude Code's API requests.
 
+## Tips
+
+- **Recommended: use with Claude Code** — run this project inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code) for the best experience.
+- **Ask Claude about unfamiliar messages** — if you see a message you don't understand in the viewer (e.g. `ToolSearch`, `system-reminder`), just ask Claude Code to explain it.
+- **Reference specific rounds** — use `C0R1` to refer to Conversation #0, Round 1 when discussing with Claude Code. For example: "What does the tool_use in C0R1 do?"
+
 ## Usage
 
 ### 1. Start the proxy
