@@ -2,6 +2,8 @@
 
 Record, inspect and replay Claude Code's API requests.
 
+![ccreplay viewer](ccreplay.png)
+
 ## Tips
 
 - **Recommended: use with Claude Code** — run this project inside [Claude Code](https://docs.anthropic.com/en/docs/claude-code) for the best experience.
